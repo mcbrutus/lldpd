@@ -53,6 +53,9 @@ version_display(FILE *destination, const char *progname, int verbose)
 #ifdef ENABLE_DOT3
 		"Dot3",
 #endif
+#ifdef ENABLE_DCBX
+		"DCBX",
+#endif
 #ifdef ENABLE_CUSTOM
 		"Custom TLV",
 #endif

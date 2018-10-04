@@ -45,7 +45,8 @@ liblldpd_la_SOURCES += \
 	interfaces-linux.c \
 	netlink.c \
 	dmi-linux.c \
-	priv-linux.c
+	priv-linux.c \
+	interfaces-dcbx.c
 endif
 if HOST_OS_DRAGONFLY
 liblldpd_la_SOURCES += \

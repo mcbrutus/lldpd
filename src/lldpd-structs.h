@@ -234,6 +234,40 @@ MARSHAL_FSTR(lldpd_custom, oui_info, oui_info_len)
 MARSHAL_END(lldpd_custom);
 #endif
 
+#ifdef ENABLE_DCBX
+struct lldpd_dcbx_app {
+	TAILQ_ENTRY(lldpd_dcbx_app)	next;
+	u_int8_t			app[3];
+};
+MARSHAL_BEGIN(lldpd_dcbx_app)
+MARSHAL_TQE(lldpd_dcbx_app, next)
+MARSHAL_END(lldpd_dcbx_app);
+
+struct lldpd_dcbx {
+	struct {
+		u_int8_t		state;
+		u_int8_t		enable;
+	} pfc;
+	TAILQ_HEAD(, lldpd_dcbx_app)	apt_list;
+};
+MARSHAL_BEGIN(lldpd_dcbx)
+MARSHAL_SUBTQ(lldpd_dcbx, lldpd_dcbx_app, apt_list)
+MARSHAL_END(lldpd_dcbx)
+
+struct lldpd_dcbx_hwif {
+	int			supported;	/* -1 == check, 0 == no, 1 == yes */
+        int                     pend;           /* 0 == no, 1 == yes */
+	char		       *buf;            /* last recv'd netlink GET */
+	int			buf_len;
+	char		       *buf_attr;       /* rattr poingers into buf */
+	int			buf_attr_len;
+};
+MARSHAL_BEGIN(lldpd_dcbx_hwif)
+MARSHAL_FSTR(lldpd_dcbx_hwif, buf, buf_len)
+MARSHAL_FSTR(lldpd_dcbx_hwif, buf_attr, buf_attr_len)
+MARSHAL_END(lldpd_dcbx_hwif);
+#endif
+
 struct lldpd_port {
 	TAILQ_ENTRY(lldpd_port)	 p_entries;
 	struct lldpd_chassis	*p_chassis;    /* Attached chassis */
@@ -283,6 +317,12 @@ struct lldpd_port {
 	TAILQ_HEAD(, lldpd_ppvid) p_ppvids;
 	TAILQ_HEAD(, lldpd_pi)	  p_pids;
 #endif
+
+#ifdef ENABLE_DCBX
+	struct lldpd_dcbx	p_dcbx;
+	struct lldpd_dcbx_hwif	p_dcbx_hwoffload;
+#endif
+
 #ifdef ENABLE_CUSTOM
 	TAILQ_HEAD(, lldpd_custom) p_custom_list;
 #endif
@@ -302,6 +342,10 @@ MARSHAL_SUBSTRUCT(lldpd_port, lldpd_med_loc, p_med_location[2])
 MARSHAL_SUBTQ(lldpd_port, lldpd_vlan, p_vlans)
 MARSHAL_SUBTQ(lldpd_port, lldpd_ppvid, p_ppvids)
 MARSHAL_SUBTQ(lldpd_port, lldpd_pi, p_pids)
+#endif
+#ifdef ENABLE_DCBX
+MARSHAL_SUBSTRUCT(lldpd_port, lldpd_dcbx, p_dcbx)
+MARSHAL_SUBSTRUCT(lldpd_port, lldpd_dcbx_hwif, p_dcbx_hwoffload)
 #endif
 #ifdef ENABLE_CUSTOM
 MARSHAL_SUBTQ(lldpd_port, lldpd_custom, p_custom_list)
@@ -544,6 +588,9 @@ void	 lldpd_config_cleanup(struct lldpd_config *);
 void	 lldpd_ppvid_cleanup(struct lldpd_port *);
 void	 lldpd_vlan_cleanup(struct lldpd_port *);
 void	 lldpd_pi_cleanup(struct lldpd_port *);
+#endif
+#ifdef ENABLE_DCBX
+void     lldpd_dcbx_cleanup(struct lldpd_port *);
 #endif
 #ifdef ENABLE_CUSTOM
 void     lldpd_custom_tlv_cleanup(struct lldpd_port *, struct lldpd_custom *);

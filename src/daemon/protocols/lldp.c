@@ -86,6 +86,9 @@ static int _lldp_send(struct lldpd *global,
 	int i;
 	const u_int8_t med[] = LLDP_TLV_ORG_MED;
 #endif
+#ifdef ENABLE_DCBX
+	struct lldpd_dcbx_app *app;
+#endif
 #ifdef ENABLE_CUSTOM
 	struct lldpd_custom *custom;
 #endif
@@ -444,6 +447,31 @@ static int _lldp_send(struct lldpd *global,
 	}
 #endif
 
+#ifdef ENABLE_DCBX
+	/* Willing to recv or PFC enabled? */
+	if ((port->p_dcbx.pfc.state & LLDP_DCBX_PFC_WILLING) ||
+	    port->p_dcbx.pfc.enable) {
+		if (!(
+		    POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+		    POKE_BYTES(dot1, sizeof(dot1)) &&
+		    POKE_UINT8(LLDP_TLV_DOT1_DCBX_PFC) &&
+		    POKE_UINT8(port->p_dcbx.pfc.state) &&
+		    POKE_UINT8(port->p_dcbx.pfc.enable) &&
+		    POKE_END_LLDP_TLV))
+			goto toobig;
+	}
+	/* For any received or configured APP TLVs */
+	TAILQ_FOREACH(app, &port->p_dcbx.apt_list, next) {
+		if (!(POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+		    POKE_BYTES(dot1, sizeof(dot1)) &&
+		    POKE_UINT8(LLDP_TLV_DOT1_DCBX_APP) &&
+		    POKE_UINT8(0) &&
+		    POKE_BYTES(app->app, sizeof(app->app)) &&
+		    POKE_END_LLDP_TLV))
+			goto toobig;
+	}
+#endif
+
 #ifdef ENABLE_CUSTOM
 	TAILQ_FOREACH(custom, &port->p_custom_list, next) {
 		if (!(
@@ -629,6 +657,9 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 #ifdef ENABLE_CUSTOM
 	TAILQ_INIT(&port->p_custom_list);
 #endif
+#ifdef ENABLE_DCBX
+	TAILQ_INIT(&port->p_dcbx.apt_list);
+#endif
 
 	length = s;
 	pos = (u_int8_t*)frame;
@@ -777,11 +808,9 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 			PEEK_BYTES(orgid, sizeof(orgid));
 			tlv_subtype = PEEK_UINT8;
 			if (memcmp(dot1, orgid, sizeof(orgid)) == 0) {
-#ifndef ENABLE_DOT1
-				hardware->h_rx_unrecognized_cnt++;
-#else
-				/* Dot1 */
 				switch (tlv_subtype) {
+#ifdef ENABLE_DOT1
+				/* Dot1 */
 				case LLDP_TLV_DOT1_VLANNAME:
 					CHECK_TLV_SIZE(7, "VLAN");
 					if ((vlan = (struct lldpd_vlan *)calloc(1,
@@ -862,11 +891,53 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 					    pi, p_entries);
 					pi = NULL;
 					break;
+#endif
+#ifdef ENABLE_DCBX
+				/* DCBX */
+				case LLDP_TLV_DOT1_DCBX_PFC:
+					log_debug("lldp", "LLDP_TLV_DOT1_DCBX_PFC on %s", hardware->h_ifname);
+					if (tlv_size != 6) {
+						log_warnx("lldp", "lldp IEEE-DCBX-PFC tlv size (%d) missmatch on %s",
+						    tlv_size, hardware->h_ifname);
+						goto malformed;
+					}
+					port->p_dcbx.pfc.state = PEEK_UINT8;
+					port->p_dcbx.pfc.enable = PEEK_UINT8;
+					break;
+				case LLDP_TLV_DOT1_DCBX_APP: {
+					int apt_size;
+					struct lldpd_dcbx_app *app;
+
+					log_debug("lldp", "LLDP_TLV_DOT1_DCBX_APP on %s", hardware->h_ifname);
+					if ((tlv_size - 5) % sizeof(struct lldpd_dcbx_app)) {
+						log_warnx("lldp", "lldp IEEE-DCBX-APP tlv size (%d) missmatch on %s",
+						    tlv_size, hardware->h_ifname);
+						goto malformed;
+					}
+					PEEK_DISCARD_UINT8;
+					apt_size = (tlv_size - 5) / sizeof(*app);
+					while (apt_size--) {
+						app = (struct lldpd_dcbx_app*)calloc(1, sizeof(*app));
+						if (!app) {
+							log_warn("lldp",
+							    "unable to allocate memory for IEE-DCBX-APP TLV");
+							goto malformed;
+						}
+						PEEK_BYTES(app->app, sizeof(app->app));
+						TAILQ_INSERT_TAIL(&port->p_dcbx.apt_list, app, next);
+					}
+					break;
+				}
+				case LLDP_TLV_DOT1_DCBX_ETS_CONF:
+				case LLDP_TLV_DOT1_DCBX_ETS_RECO:
+				case LLDP_TLV_DOT1_DCBX_CONGESTION:
+					log_debug("lldp", "unsupported IEEE-DCBX subtype (%d) for tlv DCBX received on %s",
+					    tlv_subtype, hardware->h_ifname);
+#endif
 				default:
-					/* Unknown Dot1 TLV, ignore it */
+					/* Unknown IEEE 802.1 TLV, ignore it */
 					hardware->h_rx_unrecognized_cnt++;
 				}
-#endif
 			} else if (memcmp(dot3, orgid, sizeof(orgid)) == 0) {
 #ifndef ENABLE_DOT3
 				hardware->h_rx_unrecognized_cnt++;

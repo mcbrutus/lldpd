@@ -207,6 +207,8 @@ int	 asroot_iface_description_os(const char *, const char *);
 int	 priv_iface_promisc(const char*);
 int	 asroot_iface_promisc_os(const char *);
 int	 priv_snmp_socket(struct sockaddr_un *);
+int	 priv_netlink_socket();
+int	 priv_netlink_send(int fd, char *msg, int len);
 
 enum priv_cmd {
 	PRIV_PING,
@@ -218,6 +220,10 @@ enum priv_cmd {
 	PRIV_IFACE_DESCRIPTION,
 	PRIV_IFACE_PROMISC,
 	PRIV_SNMP_SOCKET,
+#ifdef ENABLE_DCBX
+	PRIV_NETLINK_SOCKET,
+	PRIV_NETLINK_SEND,
+#endif
 };
 
 /* priv-seccomp.c */
@@ -423,5 +429,10 @@ struct lldpd {
 	TAILQ_HEAD(, lldpd_chassis) g_chassis;
 	TAILQ_HEAD(, lldpd_hardware) g_hardware;
 };
+
+#ifdef ENABLE_DCBX
+/* interfaces-dcbx.c */
+void ifdcbx_notify(struct lldpd_hardware *hardware, struct lldpd_port *rport);
+#endif
 
 #endif /* _LLDPD_H */

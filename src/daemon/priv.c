@@ -42,6 +42,10 @@
 #include <sys/prctl.h>
 #endif
 
+#ifdef ENABLE_DCBX
+#include <linux/netlink.h>
+#endif
+
 #if defined HOST_OS_FREEBSD || HOST_OS_OSX || HOST_OS_DRAGONFLY
 # include <net/if_dl.h>
 #endif
@@ -188,6 +192,35 @@ priv_snmp_socket(struct sockaddr_un *addr)
 		return rc;
 	return receive_fd(PRIV_UNPRIVILEGED);
 }
+
+#ifdef ENABLE_DCBX
+int
+priv_netlink_socket()
+{
+	int rc;
+	enum priv_cmd cmd = PRIV_NETLINK_SOCKET;
+	must_write(PRIV_UNPRIVILEGED, &cmd, sizeof(enum priv_cmd));
+	priv_wait();
+	must_read(PRIV_UNPRIVILEGED, &rc, sizeof(int));
+	if (rc < 0)
+		return rc;
+	return receive_fd(PRIV_UNPRIVILEGED);
+}
+
+int
+priv_netlink_send(int fd, char *msg, int len)
+{
+	int rc;
+	enum priv_cmd cmd = PRIV_NETLINK_SEND;
+	must_write(PRIV_UNPRIVILEGED, &cmd, sizeof(enum priv_cmd));
+	must_write(PRIV_UNPRIVILEGED, &len, sizeof(len));
+	must_write(PRIV_UNPRIVILEGED, msg, len);
+	send_fd(PRIV_UNPRIVILEGED, fd);
+	priv_wait();
+	must_read(PRIV_UNPRIVILEGED, &rc, sizeof(int));
+	return rc;
+}
+#endif
 
 static void
 asroot_ping()
@@ -381,6 +414,40 @@ asroot_snmp_socket()
 	close(sock);
 }
 
+#ifdef ENABLE_DCBX
+static void
+asroot_netlink_socket()
+{
+	int sock;
+
+	sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+	if (sock < 0) {
+		log_warn("privsep", "cannot open netlink socket");
+		must_write(PRIV_PRIVILEGED, &sock, sizeof(int));
+		return;
+	}
+	must_write(PRIV_PRIVILEGED, &sock, sizeof(int));
+	send_fd(PRIV_PRIVILEGED, sock);
+	close(sock);
+}
+
+static void
+asroot_netlink_send()
+{
+	int rc;
+	int fd, len;
+	char *buf;
+
+	must_read(PRIV_PRIVILEGED, &len, sizeof(int));
+	buf = malloc(len);
+	must_read(PRIV_PRIVILEGED, buf, len);
+	fd = receive_fd(PRIV_PRIVILEGED);
+	rc = write(fd, buf, len);
+	free(buf);
+	must_write(PRIV_PRIVILEGED, &rc, sizeof(int));
+}
+#endif
+
 struct dispatch_actions {
 	enum priv_cmd msg;
 	void(*function)(void);
@@ -398,6 +465,10 @@ static struct dispatch_actions actions[] = {
 	{PRIV_IFACE_DESCRIPTION, asroot_iface_description},
 	{PRIV_IFACE_PROMISC, asroot_iface_promisc},
 	{PRIV_SNMP_SOCKET, asroot_snmp_socket},
+#ifdef ENABLE_DCBX
+	{PRIV_NETLINK_SOCKET, asroot_netlink_socket},
+	{PRIV_NETLINK_SEND, asroot_netlink_send},
+#endif
 	{-1, NULL}
 };
 

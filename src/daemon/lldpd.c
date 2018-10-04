@@ -178,6 +178,13 @@ lldpd_alloc_default_local_port(struct lldpd *cfg)
 #ifdef ENABLE_CUSTOM
 	TAILQ_INIT(&port->p_custom_list);
 #endif
+#ifdef ENABLE_DCBX
+	/* XXX default to "willing", PFC attr then set by switch */
+	port->p_dcbx.pfc.state = LLDP_DCBX_PFC_WILLING;
+	port->p_dcbx.pfc.enable = 0x00;
+	TAILQ_INIT(&port->p_dcbx.apt_list);
+	port->p_dcbx_hwoffload.supported = -1;
+#endif
 	cfg->g_default_local_port = port;
 }
 
@@ -208,6 +215,9 @@ lldpd_clone_port(struct lldpd_port *destination, struct lldpd_port *source)
 #endif
 #ifdef ENABLE_CUSTOM
 	marshal_repair_tailq(lldpd_custom, &destination->p_custom_list, next);
+#endif
+#ifdef ENABLE_DCBX
+	marshal_repair_tailq(lldpd_dcbx_app, &destination->p_dcbx.apt_list, next);
 #endif
 	return 0;
 }
@@ -704,6 +714,11 @@ lldpd_decode(struct lldpd *cfg, char *frame, int s,
 	    hardware->h_ifname);
 
 	if (!oport) hardware->h_insert_cnt++;
+
+#ifdef ENABLE_DCBX
+	/* Notify interface and update local dcbx port state */
+	ifdcbx_notify(hardware, port);
+#endif
 
 	/* Notify */
 	log_debug("decode", "send notifications for changes on %s",

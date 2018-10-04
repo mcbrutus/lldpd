@@ -103,6 +103,26 @@ lldpd_pi_cleanup(struct lldpd_port *port)
 }
 #endif
 
+#ifdef ENABLE_DCBX
+void
+lldpd_dcbx_cleanup(struct lldpd_port *port)
+{
+	struct lldpd_dcbx_app *app, *app_next;
+
+	free(port->p_dcbx_hwoffload.buf);
+	port->p_dcbx_hwoffload.buf = NULL;
+	free(port->p_dcbx_hwoffload.buf_attr);
+	port->p_dcbx_hwoffload.buf_attr = NULL;
+	for (app = TAILQ_FIRST(&port->p_dcbx.apt_list);
+	    app != NULL;
+	    app = app_next) {
+		app_next = TAILQ_NEXT(app, next);
+		free(app);
+	}
+	TAILQ_INIT(&port->p_dcbx.apt_list);
+}
+#endif
+
 #ifdef ENABLE_CUSTOM
 void
 lldpd_custom_tlv_add(struct lldpd_port *port, struct lldpd_custom *curr)
@@ -224,6 +244,9 @@ lldpd_port_cleanup(struct lldpd_port *port, int all)
 			port->p_chassis->c_refcount--;
 			port->p_chassis = NULL;
 		}
+#ifdef ENABLE_DCBX
+		lldpd_dcbx_cleanup(port);
+#endif
 #ifdef ENABLE_CUSTOM
 		lldpd_custom_list_cleanup(port);
 #endif

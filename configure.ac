@@ -361,10 +361,11 @@ lldp_ARG_ENABLE([fdp], [Foundry Discovery Protocol], [yes])
 lldp_ARG_ENABLE([edp], [Extreme Discovery Protocol], [yes])
 lldp_ARG_ENABLE([sonmp], [SynOptics Network Management Protocol], [yes])
 
-# LLDPMED/Dot1/Dot3
+# LLDPMED/Dot1/Dot3/DCBX
 lldp_ARG_ENABLE([lldpmed], [LLDP-MED extension], [yes])
 lldp_ARG_ENABLE([dot1], [Dot1 extension (VLAN stuff)], [yes])
 lldp_ARG_ENABLE([dot3], [Dot3 extension (PHY stuff)], [yes])
+lldp_ARG_ENABLE([dcbx], [Data Center Bridging Capability], [yes])
 lldp_ARG_ENABLE([custom], [Custom TLV support], [yes])
 
 # Oldies
@@ -426,6 +427,7 @@ cat <<EOF
   LLDPMED........: $enable_lldpmed
   DOT1...........: $enable_dot1
   DOT3...........: $enable_dot3
+  DCBX...........: $enable_dcbx
   CUSTOM.........: $enable_custom
   XML output.....: ${with_xml-no}
   Oldies support.: $enable_oldies
